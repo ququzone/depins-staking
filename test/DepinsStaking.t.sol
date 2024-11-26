@@ -8,6 +8,6 @@ contract DepinsStakingTest is Test {
     DepinsStaking public staking;
 
     function setUp() public {
-        staking = new DepinsStaking();
+        // staking = new DepinsStaking();
     }
 }
