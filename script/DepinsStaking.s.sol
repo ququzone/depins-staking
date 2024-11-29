@@ -1,13 +1,27 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {Script, console} from "forge-std/Script.sol";
+import "forge-std/Script.sol";
 
-contract DepinsStakingScript is Script {
-    function setUp() public {}
+import {TransparentUpgradeableProxy} from
+    "openzeppelin-contracts/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 
-    function run() public {
+import {DepinsStaking} from "src/DepinsStaking.sol";
+import {Depins} from "src/test/Depins.sol";
+
+contract DeployVault is Script {
+    function run() external {
         vm.startBroadcast();
+
+        Depins depins = new Depins();
+        DepinsStaking implementation = new DepinsStaking(address(depins));
+        TransparentUpgradeableProxy staking = new TransparentUpgradeableProxy(
+            address(implementation), msg.sender, abi.encodeCall(DepinsStaking.initialize, ("Depins Staking", "DST"))
+        );
+
         vm.stopBroadcast();
+
+        console.log("Depins deployed to: '%s'", address(depins));
+        console.log("DepinsStaking deployed to: '%s'", address(staking));
     }
 }

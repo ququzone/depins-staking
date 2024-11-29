@@ -157,6 +157,7 @@ contract DepinsStaking is OwnableUpgradeable, ERC721EnumerableUpgradeable {
         delete bags[_tokenId];
         _burn(_tokenId);
         depins.safeTransfer(msg.sender, amount_);
+
         emit EmergencyWithdraw(_tokenId, amount_);
     }
 

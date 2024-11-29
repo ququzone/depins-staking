@@ -4,6 +4,6 @@ out = "out"
 libs = ["lib"]
 
 evm_version = 'london'
-solc = '0.8.20'
+solc = '0.8.23'
 optimizer = true
 optimizer_runs = 10_000
