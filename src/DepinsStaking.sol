@@ -6,22 +6,25 @@ import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Own
 import {ERC721EnumerableUpgradeable} from
     "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721EnumerableUpgradeable.sol";
 
+struct StakingType {
+    uint64 stakingPeriod;
+    uint64 freezenPeriod;
+    uint64 stakingRate;
+    uint64 enable;
+}
+
+struct Bag {
+    uint64 stakingType;
+    uint64 stakingTime;
+    uint64 stakingRate;
+    uint64 withdrawTime;
+    uint256 stakingAmount;
+}
+
 contract DepinsStaking is OwnableUpgradeable, ERC721EnumerableUpgradeable {
     using SafeERC20 for IERC20;
 
-    struct StakingType {
-        uint64 stakingPeriod;
-        uint64 freezenPeriod;
-        uint64 stakingRate;
-    }
-
-    struct Bag {
-        uint64 stakingType;
-        uint64 stakingTime;
-        uint64 stakingRate;
-        uint64 withdrawTime;
-        uint256 stakingAmount;
-    }
+    uint64 constant DAY = 86400;
 
     event StopStake();
     event StartStake();
@@ -44,16 +47,15 @@ contract DepinsStaking is OwnableUpgradeable, ERC721EnumerableUpgradeable {
     uint256 nextId;
     bool public stakeable;
     uint64 public maxStakePeriod;
-    mapping(uint64 => StakingType) public stakingType;
-    mapping(uint256 => Bag) public bags;
+    mapping(uint64 => StakingType) stakingTypes;
+    mapping(uint256 => Bag) bags;
 
     constructor(address _depins) {
-        _disableInitializers();
         depins = IERC20(_depins);
     }
 
     function initialize(uint64 _maxStakePeriod, string memory _name, string memory _symbol) external initializer {
-        require(_maxStakePeriod > 0 && _maxStakePeriod % 86400 == 0, "invalid period");
+        require(_maxStakePeriod > 0 && _maxStakePeriod % DAY == 0, "invalid period");
         __Ownable_init(msg.sender);
         __ERC721_init(_name, _symbol);
         __ERC721Enumerable_init();
@@ -85,20 +87,24 @@ contract DepinsStaking is OwnableUpgradeable, ERC721EnumerableUpgradeable {
         onlyOwner
     {
         require(
-            _stakingPeriod > 0 && _stakingRate > 0 && _stakingRate < 1000000 && _stakingPeriod % 86400 == 0,
+            _stakingPeriod > 0 && _stakingRate > 0 && _stakingRate < 1000000 && _stakingPeriod % DAY == 0,
             "invalid params"
         );
-        require(stakingType[_stakingType].stakingPeriod == 0, "type exists");
+        require(stakingTypes[_stakingType].stakingPeriod == 0, "type exists");
 
-        stakingType[_stakingType] =
-            StakingType({stakingPeriod: _stakingPeriod, freezenPeriod: _freezenPeriod, stakingRate: _stakingRate});
+        stakingTypes[_stakingType] = StakingType({
+            stakingPeriod: _stakingPeriod,
+            freezenPeriod: _freezenPeriod,
+            stakingRate: _stakingRate,
+            enable: 1
+        });
         emit NewStakingType(_stakingType, _stakingPeriod, _freezenPeriod, _stakingRate);
     }
 
     function removeStakingType(uint64 _stakingType) external onlyOwner {
-        require(stakingType[_stakingType].stakingPeriod > 0, "type not exists");
+        require(stakingTypes[_stakingType].enable != 0, "type not exists");
 
-        delete stakingType[_stakingType];
+        stakingTypes[_stakingType].enable = 0;
         emit RemoveStakingType(_stakingType);
     }
 
@@ -106,14 +112,14 @@ contract DepinsStaking is OwnableUpgradeable, ERC721EnumerableUpgradeable {
         require(_stakingAmount > 0, "zero amount");
         require(stakeable, "stake stopped");
 
-        StakingType memory _type = stakingType[_stakingType];
-        require(_type.stakingPeriod > 0, "type not exists");
+        StakingType memory _type = stakingTypes[_stakingType];
+        require(_type.enable == 1, "type not exists");
 
         depins.safeTransferFrom(msg.sender, address(this), _stakingAmount);
         tokenId_ = nextId;
         ++nextId;
 
-        uint64 _now = uint64(block.timestamp) / 86400 * 86400;
+        uint64 _now = uint64(block.timestamp) / DAY * DAY;
         uint64 _withdrawTime = 0;
         if (_type.freezenPeriod == 0) {
             _withdrawTime = _now + _type.stakingPeriod;
@@ -140,12 +146,12 @@ contract DepinsStaking is OwnableUpgradeable, ERC721EnumerableUpgradeable {
         Bag storage _bag = bags[_tokenId];
         require(_bag.withdrawTime == 0, "unstaked");
 
-        uint64 _withdrawTime = uint64(block.timestamp) / 86400 * 86400;
-        if (_withdrawTime - _bag.stakingRate > maxStakePeriod) {
-            _withdrawTime = _bag.stakingRate + maxStakePeriod;
+        uint64 _withdrawTime = uint64(block.timestamp) / DAY * DAY;
+        if (_withdrawTime - _bag.stakingTime > maxStakePeriod) {
+            _withdrawTime = _bag.stakingTime + maxStakePeriod;
         }
 
-        _bag.withdrawTime = _withdrawTime;
+        _bag.withdrawTime = _withdrawTime + stakingTypes[_bag.stakingType].freezenPeriod;
         success_ = true;
 
         emit Unstake(msg.sender, _tokenId);
@@ -154,14 +160,15 @@ contract DepinsStaking is OwnableUpgradeable, ERC721EnumerableUpgradeable {
     function withdraw(uint256 _tokenId) external returns (uint256 amount_) {
         address _owner = _requireOwned(_tokenId);
         Bag memory _bag = bags[_tokenId];
-        require(_bag.withdrawTime > 0, "staking");
+        require(_bag.withdrawTime <= block.timestamp, "staking");
 
-        uint256 _amount = _bag.stakingAmount;
-        uint256 yield = ((_bag.withdrawTime - _bag.stakingTime) / 86400 * _bag.stakingRate) * _amount / 1000000;
+        uint256 _withdrawTime = _bag.withdrawTime - stakingTypes[_bag.stakingType].freezenPeriod;
+        amount_ = _bag.stakingAmount;
+        uint256 yield = uint256((_withdrawTime - _bag.stakingTime) / DAY * _bag.stakingRate) * amount_ / 1000000;
         delete bags[_tokenId];
         _burn(_tokenId);
         depins.safeTransfer(_owner, amount_ + yield);
-        emit Withdraw(_owner, _tokenId, _amount, yield);
+        emit Withdraw(_owner, _tokenId, amount_, yield);
     }
 
     function emergencyWithdraw(uint256 _tokenId) external returns (uint256 amount_) {
@@ -178,5 +185,13 @@ contract DepinsStaking is OwnableUpgradeable, ERC721EnumerableUpgradeable {
     function adminWithdraw() external onlyOwner {
         require(totalSupply() == 0, "exists staking");
         depins.safeTransfer(msg.sender, depins.balanceOf(address(this)));
+    }
+
+    function bag(uint256 _tokenId) external view returns (Bag memory) {
+        return bags[_tokenId];
+    }
+
+    function stakingType(uint64 _stakingType) external view returns (StakingType memory) {
+        return stakingTypes[_stakingType];
     }
 }
