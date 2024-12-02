@@ -42,6 +42,7 @@ contract DepinsStaking is OwnableUpgradeable, ERC721EnumerableUpgradeable {
     IERC20 public immutable depins;
     uint256 nextId;
     bool public stakeable;
+    uint64 public maxStakePeriod;
     mapping(uint64 => StakingType) public stakingType;
     mapping(uint256 => Bag) public bags;
 
@@ -50,11 +51,13 @@ contract DepinsStaking is OwnableUpgradeable, ERC721EnumerableUpgradeable {
         depins = IERC20(_depins);
     }
 
-    function initialize(string memory _name, string memory _symbol) external initializer {
+    function initialize(uint64 _maxStakePeriod, string memory _name, string memory _symbol) external initializer {
+        require(_maxStakePeriod > 0 && _maxStakePeriod % 86400 == 0, "invalid period");
         __Ownable_init(msg.sender);
         __ERC721_init(_name, _symbol);
         __ERC721Enumerable_init();
         stakeable = true;
+        maxStakePeriod = _maxStakePeriod;
     }
 
     function stopStake() external onlyOwner {
@@ -106,7 +109,7 @@ contract DepinsStaking is OwnableUpgradeable, ERC721EnumerableUpgradeable {
 
         uint64 _now = uint64(block.timestamp) / 86400 * 86400;
         uint64 _withdrawTime = 0;
-        if (_type.freezenPeriod > 0) {
+        if (_type.freezenPeriod == 0) {
             _withdrawTime = _now + _type.stakingPeriod;
         }
 
@@ -131,7 +134,12 @@ contract DepinsStaking is OwnableUpgradeable, ERC721EnumerableUpgradeable {
         Bag storage _bag = bags[_tokenId];
         require(_bag.withdrawTime == 0, "unstaked");
 
-        _bag.withdrawTime = uint64(block.timestamp) / 86400 * 86400;
+        uint64 _withdrawTime = uint64(block.timestamp) / 86400 * 86400;
+        if (_withdrawTime - _bag.stakingRate > maxStakePeriod) {
+            _withdrawTime = _bag.stakingRate + maxStakePeriod;
+        }
+
+        _bag.withdrawTime = _withdrawTime;
         success_ = true;
 
         emit Unstake(msg.sender, _tokenId);
