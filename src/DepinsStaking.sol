@@ -25,6 +25,7 @@ contract DepinsStaking is OwnableUpgradeable, ERC721EnumerableUpgradeable {
 
     event StopStake();
     event StartStake();
+    event ChangeMaxStakePeriod(uint256 maxStakePeriod);
     event NewStakingType(uint64 stakingType, uint64 stakingPeriod, uint64 freezonPeriod, uint64 stakingRate);
     event RemoveStakingType(uint64 stakingType);
     event EmergencyWithdraw(uint256 tokenId, uint256 amount);
@@ -58,6 +59,11 @@ contract DepinsStaking is OwnableUpgradeable, ERC721EnumerableUpgradeable {
         __ERC721Enumerable_init();
         stakeable = true;
         maxStakePeriod = _maxStakePeriod;
+    }
+
+    function changeMaxStakePeriod(uint64 _maxStakePeriod) external onlyOwner {
+        maxStakePeriod = _maxStakePeriod;
+        emit ChangeMaxStakePeriod(_maxStakePeriod);
     }
 
     function stopStake() external onlyOwner {

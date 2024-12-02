@@ -16,7 +16,9 @@ contract DeployVault is Script {
         Depins depins = new Depins();
         DepinsStaking implementation = new DepinsStaking(address(depins));
         TransparentUpgradeableProxy staking = new TransparentUpgradeableProxy(
-            address(implementation), msg.sender, abi.encodeCall(DepinsStaking.initialize, ("Depins Staking", "DST"))
+            address(implementation),
+            msg.sender,
+            abi.encodeCall(DepinsStaking.initialize, (61 days, "Depins Staking", "DST"))
         );
 
         vm.stopBroadcast();
