@@ -92,7 +92,10 @@ contract DepinsStakingTest is Test {
 
         vm.warp(start + 3 days);
         assertEq(depins.balanceOf(alice), 0);
+        assertEq(staking.totalSupply(), 1);
+        assertEq(staking.ownerOf(0), alice);
         staking.withdraw(0);
         assertEq(depins.balanceOf(alice), 100.041 ether);
+        assertEq(staking.totalSupply(), 0);
     }
 }
