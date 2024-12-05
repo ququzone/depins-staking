@@ -10,11 +10,21 @@ import {DepinsStaking} from "src/DepinsStaking.sol";
 import {Depins} from "src/test/Depins.sol";
 
 contract DeployVault is Script {
+    address public depins;
+
+    function setUp() external {
+        depins = vm.envOr("DEPINS", address(0));
+    }
+
     function run() external {
         vm.startBroadcast();
 
-        Depins depins = new Depins();
-        DepinsStaking implementation = new DepinsStaking(address(depins));
+        if (depins == address(0)) {
+            depins = address(new Depins());
+            console.log("Depins deployed to: '%s'", depins);
+        }
+
+        DepinsStaking implementation = new DepinsStaking(depins);
         TransparentUpgradeableProxy staking = new TransparentUpgradeableProxy(
             address(implementation),
             msg.sender,
@@ -23,7 +33,6 @@ contract DeployVault is Script {
 
         vm.stopBroadcast();
 
-        console.log("Depins deployed to: '%s'", address(depins));
         console.log("DepinsStaking deployed to: '%s'", address(staking));
     }
 }
